@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html>
+   <head>
+      <meta charset="utf-8">
+      <meta property="og:title" content="dualBR"/>
+      <meta property="og:image:width" content="1200"/>
+      <meta property="og:image:height" content="600"/>
+      
+      <!-- Primary Meta Tags -->
+      <title>Motion Blur Decomposition with Cross-shutter Guidance</title>
+      <meta name="title" content="Motion Blur Decomposition with Cross-shutter Guidance">
+      <meta name="description" content="">
+
+      <!-- Set the format when shared to target app  -->
+      <!-- Open Graph / Facebook -->
+      <meta property="og:type" content="website">
+      <meta property="og:url" content="https://jixiang2016.github.io/dualBR_site">
+      <meta property="og:title" content="Motion Blur Decomposition with Cross-shutter Guidance">
+      <meta property="og:description" content="">
+      <meta property="og:image" content="https://jixiang2016.github.io/dualBR_site/static/icons/dualBR_logo.png">
+      <!-- Twitter -->
+      <meta property="twitter:card" content="summary_large_image">
+      <meta property="twitter:url" content="https://jixiang2016.github.io/dualBR_site">
+      <meta property="twitter:title" content="Motion Blur Decomposition with Cross-shutter Guidance">
+      <meta property="twitter:description" content="">
+      <meta property="twitter:image" content="https://jixiang2016.github.io/dualBR_site/static/icons/dualBR_logo.png">
+
+
+
+      <style>
+       
+        button {
+            padding: 0.5em 0.75em;
+            margin: 0.4em 0.4em;
+            min-width: 18ch;
+            text-align: left;
+            background-color: #ddd;
+            color: #333;
+            border-radius: 5px;
+            border: none;
+            cursor: pointer;
+
+            @media screen and (-ms-high-contrast: active) {
+                border: 2px solid currentcolor;
+            }
+        }
+
+        button.on {
+            background-color: #333;
+            color: #eee; /*#bbb;*/
+        }
+
+        p.btncap {
+            margin: 0.4em 0.4em;
+            padding: 0 0.2em;
+            color: #333;
+            border-bottom: 2px solid #333;
+            font-weight: bold;
+            font-style: italic;
+            font-size: 0.8em;
+        }
+
+        .center {
+            text-align: center;
+        }
+
+        .flex {
+            display: flex;
+        }
+
+        .desc {
+            margin: 1.5em 0.4em;
+        }
+
+        .wider_buttons button {
+            display: block;
+            min-width: 20.5ch;
+        }
+
+        .dropbtn {
+        }
+
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: #f1f1f1;
+            min-width: 160px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            z-index: 1;
+        }
+
+        .dropdown-content a {
+            color: black;
+            text-decoration: none;
+            display: block;
+        }
+
+        .dropdown-content a:hover {background-color: #ddd;}
+
+        .dropdown:hover .dropdown-content {display: block;}
+
+        .dropdown:hover .dropbtn {background-color: #aaaaaa;}
+
+        button {
+            display: block;
+        }
+
+        /*video {*/
+            /*display: none;*/
+            /*width: 360px;*/
+            /*height: 360px;*/
+            /*margin: auto;*/ /*0.4em;*/
+        /*}*/
+
+/*        video.on {
+            display: block;
+        }*/
+        .shadow {
+            box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+        }
+		
+		
+    </style>
+
+  
+   <script>
+        class VideoHandler {
+            constructor(n_data, n_methods, databtn_id, vidbtn_id, vidtag_id) {
+                this.n_data = n_data;
+                this.n_methods = n_methods;
+
+                this.databtn_id = databtn_id;
+                this.vidbtn_id = vidbtn_id;
+                this.vidtag_id = vidtag_id;
+
+                this.current_data = 0;
+                this.current_method = 0;
+                this.re10k_data_count = 10;
+                this.method_list = ["blur", "rs", "hs"];
+            }
+
+            get paused() {
+                return document.getElementById(this.vidtag_id + "0").paused;
+            }
+
+            sync_video(e) {
+                if (e === undefined) {
+                    return;
+                }
+                for (let i = 0; i < this.n_methods; i++) {
+                    let v = document.getElementById(this.vidtag_id + i.toString());
+                    if (v != e.currentTarget) {
+                        v.currentTime = e.currentTarget.currentTime;
+                    }
+                }
+            };
+
+            play_video(e) {
+                this.sync_video(e);
+                for (let i = 0; i < this.n_methods; i++) {
+                    document.getElementById(this.vidtag_id + i.toString()).play();
+                }
+            };
+
+            pause_video(e) {
+                for (let i = 0; i < this.n_methods; i++) {
+                    document.getElementById(this.vidtag_id + i.toString()).pause();
+                }
+                this.sync_video(e);
+            };
+
+            handleEvent(e) {
+                switch (e.type) {
+                    case "play": this.play_video(e); break;
+                    case "pause": this.pause_video(e); break;
+                    case "seeking": this.sync_video(e); break;
+                    case "seeked": this.sync_video(e); break;
+                    case "playing": this.sync_video(e); break;
+                }
+            }
+
+            select_data(j) {
+                this.current_data = j;
+                // if (j > this.re10k_data_count && this.current_method == 3) {
+                //     this.select_method(0);
+                // }
+
+                let autoplay = !this.paused;
+                let data_name = document.getElementById(this.databtn_id + j.toString()).value;
+                for (let i = 0; i < this.n_data; i++) {
+                    document.getElementById(this.databtn_id + i.toString()).className = (i == j ? "on" : "");
+                }
+                for (let i = 0; i < this.n_methods; i++) {
+                    // let video_name = document.getElementById(this.vidbtn_id + i.toString()).value;
+                    let video_name = this.method_list[i];
+
+                    if (j > this.re10k_data_count && i == 3) {
+                        //video_name = "ours";
+                        continue;
+                    }
+                    let v = document.getElementById(this.vidtag_id + i.toString());
+                    v.src = "./static/videos/" + data_name + "_" + video_name + ".mp4";
+					//v.src = "./static/videos/" + data_name + "_" + video_name + "_True.mp4";
+                }
+                if (autoplay) {
+                    this.play_video();
+                }
+
+                // let se3ds_btn = document.getElementById("cmp_btn3");
+                // if(j > this.re10k_data_count) {
+                //     se3ds_btn.disabled = true;
+                //     se3ds_btn.style.textDecoration = "line-through";
+                // }
+                // else {
+                //     se3ds_btn.disabled = false;
+                //     se3ds_btn.style.textDecoration = "none";
+                // }
+            };
+
+            register() {
+                for (let i = 0; i < this.n_data; i++) {
+                    document.getElementById(this.databtn_id + i.toString()).addEventListener("click", function () { this.select_data(i); }.bind(this, i));
+                }
+
+                // for (let i = 0; i < this.n_methods; i++) {
+                //     document.getElementById(this.vidbtn_id + i.toString()).addEventListener("click", function () { this.select_method(i); }.bind(this, i));
+                // }
+
+                for (let i = 0; i < this.n_methods; i++) {
+                    document.getElementById(this.vidtag_id + i.toString()).muted = true;
+                }
+
+                //this.select_video(0);
+            }
+        }
+
+        window.onload = function () {
+            cmp_handler = new VideoHandler(7, 3, "cmp_data", "cmp_btn", "cmp_vid");
+            cmp_handler.register();
+            cmp_handler.play_video();
+        };
+    </script>
+	
+ 
+
+
+      <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+         rel="stylesheet">
+      <link rel="icon" href="static/icons/my_icon.png">
+      <link rel="stylesheet" type="text/css" href="./static/slick/slick.css"/>
+      <link rel="stylesheet" type="text/css" href="./static/slick/slick-theme.css"/>
+      <link rel="stylesheet" href="static/css/bulma.min.css">
+      <link rel="stylesheet" href="static/css/bulma-carousel.min.css">
+      <link rel="stylesheet" href="static/css/bulma-slider.min.css">
+      <link rel="stylesheet" href="static/css/fontawesome.all.min.css">
+      <link rel="stylesheet"
+         href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+      <link rel="stylesheet" href="static/css/index.css">
+	  
+      <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+      <script src="https://documentcloud.adobe.com/view-sdk/main.js"></script>
+	  
+      <script defer src="static/js/fontawesome.all.min.js"></script>
+      <script src="static/js/bulma-carousel.min.js"></script>
+      <script src="static/js/bulma-slider.min.js"></script>
+      <script src="static/js/index.js"></script>
+
+   </head>
+   
+   
+   
+   
+   <body>
+      <section class="publication-header">
+         <div class="hero-body">
+            <div class="container is-max-widescreen">
+               <div class="column has-text-centered">
+                  <h1 class="title is-2 publication-title">
+                     Motion Blur Decomposition with Cross-shutter Guidance
+                  </h1>
+               </div>
+            </div>
+         </div>
+      </section>
+	  
+	  
+      <section class="publication-author-block">
+         <div class="hero-body">
+            <div class="container ">
+               <div class="columns is-centered">
+                  <div class="column has-text-centered">
+                     <div class="column has-text-centered">
+                     <div class="is-size-5 publication-authors">
+                        <span class="author-block">
+                              Xiang Ji &nbsp;&nbsp;&nbsp;&nbsp;</span>
+                        <span class="author-block">
+                              Haiyang Jiang &nbsp;&nbsp;&nbsp;&nbsp;</span>
+                        <span class="author-block">
+                        <a href="https://www.ai.u-tokyo.ac.jp/ja/members/yqzheng">Yinqiang Zheng</a></span>
+                    
+                     </div>
+					 
+                     <div class="is-size-5 publication-authors">
+                        <span class="author-block"> The University of Tokyo</span>
+                     </div>
+                     </div>
+          
+                     <div class="column has-text-centered">
+                        <div class="publication-links">
+                           <span class="link-block">
+                           <a href="https://arxiv.org/pdf/2404.01120.pdf"
+                              class="external-link button is-normal is-rounded is-dark">
+                           <span class="icon">
+                           <i class="fas fa-file-pdf"></i>
+                           </span>
+                           <span>Paper</span>
+                           </a>
+                           </span>
+                           <span class="link-block">
+                           <a href="https://arxiv.org/abs/2404.01120" target="_blank"
+                              class="external-link button is-normal is-rounded is-dark">
+                           <span class="icon">
+                           <i class="ai ai-arxiv"></i>
+                           </span>
+                           <span>arXiv</span>
+                           </a>
+                           </span>
+                           <span class="link-block">
+                           <a href="https://github.com/jixiang2016/dualBR"
+                              class="external-link button is-normal is-rounded is-dark">
+                           <span class="icon">
+                           <i class="fab fa-github"></i>
+                           </span>
+                           <span>Code</span>
+                           </a>
+                           </span>
+						    <span class="link-block">
+                           <a href="https://drive.google.com/file/d/1s9t6DHHfzB-o6pDhg4vqcgcFR6gdLxqj/view?usp=sharing"
+                              class="external-link button is-normal is-rounded is-dark">
+                           <span class="icon">
+                           <i class="far fa-images"></i>
+                           </span>
+                           <span>Data</span>
+                           </a>
+                           </span>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            </div>
+         </div>
+      </section>
+
+
+
+      <section class="hero is-dark is-small">
+         <div class="hero-body">
+            <div class="container">
+               <div id="results-carousel" class="carousel results-carousel">
+                  <div class="item item-res1">
+                     <video poster="" id="res1" autoplay controls muted loop playsinline webkit-playsinline height="100%"  >
+                        <source src="./static/videos/_Scene25_1_1_ours.mp4"
+                           type="video/mp4">
+                     </video>
+                  </div>
+                  <div class="item item-res2">
+                     <video poster="" id="res2" autoplay controls muted loop playsinline webkit-playsinline height="100%"  >
+                        <source src="./static/videos/GOPR0869_11_00_ours.mp4"
+                           type="video/mp4">
+                     </video>
+                  </div>
+                  <div class="item item-res3">
+                     <video poster="" id="res3" autoplay controls muted loop playsinline webkit-playsinline height="100%">
+                        <source src="./static/videos/_Scene18_2_ours.mp4"
+                           type="video/mp4" >
+                     </video>
+                  </div>
+                  <div class="item item-res4">
+                     <video poster="" id="res4" autoplay controls muted loop playsinline webkit-playsinline height="100%">
+                        <source src="./static/videos/GOPR0385_11_01_ours.mp4"
+                           type="video/mp4" >
+                     </video>
+                  </div>
+                  <div class="item item-res5">
+                     <video poster="" id="res5" autoplay controls muted loop playsinline webkit-playsinline height="100%">
+                        <source src="./static/videos/_Scene25_1_2_ours.mp4"
+                           type="video/mp4" > 
+                     </video>
+                  </div>
+                  <div class="item item-res6">
+                     <video poster="" id="res6" autoplay controls muted loop playsinline webkit-playsinline height="100%">
+                        <source src="./static/videos/GOPR0384_11_05_ours.mp4"
+                           type="video/mp4" >
+                     </video>
+                  </div>
+                  <div class="item item-res7">
+                     <video poster="" id="res7" autoplay controls muted loop playsinline webkit-playsinline height="100%">
+                        <source src="./static/videos/_Scene10_1_ours.mp4"
+                           type="video/mp4" >
+                     </video>
+                  </div>
+               </div>
+               <div class="columns is-centered has-text-centered">
+                  <div class="column is-three-quarters">
+                     <p>
+                        Retrieving a sequence from degradation is highly ambiguous for either blur or RS inputs. The Cross-Shutter strategy provides a way to simultaneously deal with the ambiguities of blur decomposition and RS interpolation.
+                  </div>
+               </div>
+            </div>
+         </div>
+      </section>
+	  
+	  
+
+        <section class="section hero">
+         <div class="container is-max-desktop">
+            <div class="columns is-centered has-text-centered">
+               <div class="column is-four-fifths">
+                  <h2 class="title is-3">Abstract</h2>
+                  <div class="content has-text-justified">
+                     <p>
+                       Motion blur is a frequently observed image artifact, especially under insufficient illumination where exposure time has to be prolonged so as to collect more photons 
+					   for a bright enough image. Rather than simply removing such blurring effects, recent researches have aimed at decomposing a blurry image into multiple sharp images 
+					   with spatial and temporal coherence. Since motion blur decomposition itself is highly ambiguous, priors from neighbouring frames or human annotation are usually 
+					   needed for motion disambiguation. In this paper, inspired by the complementary exposure characteristics of a global shutter (GS) camera and a rolling shutter (RS) 
+					   camera, we propose to utilize the ordered scanline-wise delay in a rolling shutter image to robustify motion decomposition of a single blurry image. 
+					   To evaluate this novel dual imaging setting, we construct a triaxial system to collect realistic data, as well as a deep network architecture that 
+					   explicitly addresses temporal and contextual information through reciprocal branches for cross-shutter motion blur decomposition. Experiment results 
+					   have verified the effectiveness of our proposed algorithm, as well as the validity of our dual imaging setting.
+					 </p>
+                  </div>
+               </div>
+            </div>
+         </div>
+      </section>
+      <!-- <hr> -->
+
+      <section class="section">
+
+         <div class='container is-max-desktop'>
+        <h2 class="title is-3">Method Overview</h2> 
+		<div class='content has-text-justified'>
+		<p>
+		The overall architecture contains two stages: motion interpretation and blur decomposition. Blur decomposition is implemented through a GenNet. Motion interpretation takes as input a blur image and an RS image along with
+        its temporal positional encoding. It consists of three blocks and one of them is unfolded in (b). (c) presents specific details of shutter alignment and aggregation (SAA). Feature extracted by encoder block (EB) will be converted 
+        using spatial transformer network (STN), and then enhanced through a Conv. block to accurately predict displacement field between shutters.
+        </p>
+		</div>
+		<br>
+        <div class="hero">
+		<div class="columns is-centered has-text-centered">
+            <div class="container">
+            <div class="content">
+              <img id="" style="width: 80%" src="./static/images/method.png"/>
+            </div>
+          </div>
+		</div>
+        </div>
+		
+     </div></section>
+	 
+	 
+	 
+	 
+
+<section class="section">
+         <div class='container is-max-desktop'>
+		 
+		 
+            <h2 class="title is-3">Optical System and RealBR Dataset</h2>
+
+            <div class="container is-max-desktop content">
+			
+			<br>
+			<div class="hero">
+		    <div class="columns is-centered has-text-centered">
+                <div class="container">
+                <div class="content">
+                  <img id="" style="width: 95%" src="./static/images/imaging_system.png"/>
+                </div>
+                </div>
+		    </div>
+            </div>
+			
+			<br>
+			<div class='content has-text-justified'>
+		    <p>
+		    Rather than a biaxial system for image-to-image deblurring, 
+			we develop a triaxial imaging system that simultaneously captures Blur-RS pairs along with high-speed
+            ground truth, and collect a real dataset named RealBR (samples shown as below).
+            </p>
+		    </div>
+			
+			
+             <div class="flex">
+            <div class="dropdown">
+                <button class="dropbtn"><b>Sequences (+)</b></button>
+                <div class="dropdown-content">
+                    <button id="cmp_data0" value="_Scene4_1" class="on">Building 1</button>
+                    <button id="cmp_data1" value="_Scene14_1">Bridge</button>
+                    <button id="cmp_data2" value="_Scene12_1">Street 1</button>
+                    <button id="cmp_data3" value="_Scene1_2">Building 2</button>
+                    <button id="cmp_data4" value="_Scene15_1">Train 1</button>
+                    <button id="cmp_data5" value="_Scene7_1">Street 2</button>
+					<button id="cmp_data6" value="_Scene18_2">Train 2</button>
+                </div>
+            </div>
+
+
+        </div>
+		
+		  <center>
+         <div class="columns">
+            <div class="column is-one-third-desktop is-one-third-tablet">
+               <video id="cmp_vid0" controls loop autoplay muted class="on"  height="100%">
+            <source src="./static/videos/_Scene4_1_blur.mp4" type="video/mp4"/>
+        </video>
+        <center> Input (Blur)</center>
+     </div>
+     <div class="column is-one-third-desktop is-one-third-tablet">
+        <video id="cmp_vid1" controls loop autoplay muted class="on"  height="100%">
+            <source src="./static/videos/_Scene4_1_rs.mp4" type="video/mp4" autoplay muted/>
+        </video>
+        <center> Input (RS)</center>
+     </div>
+	 
+	 <div class="column is-one-third-desktop is-one-third-tablet">
+        <video id="cmp_vid2" controls loop autoplay muted class="on"  height="100%">
+            <source src="./static/videos/_Scene4_1_hs.mp4" type="video/mp4" autoplay muted/>
+        </video>
+        <center> GT (HS)</center>
+     </div>
+  </div>
+
+	</center>	
+		
+
+
+          <!-- <hr> -->
+          <h2 class="title is-3">Comparisons on RealBR</h2>
+		  <div class='content has-text-justified'>
+           <p style="font-size: 15px">
+		    Quantitative comparisons of reconstructed latent frame sequence with lengths of 3, 5 and 9 on RealBR.
+		   </p>
+          </div>
+	    <center>
+        <div class="hero">
+		 <div class="columns is-centered has-text-centered">
+            <div class="container">
+              <div class="content">
+                  <img id="" style="width: 90%" src="./static/images/cmp_realbr.png"/>
+              </div>
+            </div>
+		 </div>
+        </div>
+        </center>
+
+
+
+<br>
+
+<center>
+<section class="hero is-light is-small" style="width: 90%">
+   <div class="hero-body">
+    <div class="container">
+      <div id="cmdp1-carousel" class="carousel cmdp1-carousel">
+	  
+        <div class="item item-cmp1 " style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; border: none; margin-bottom: 15px;">
+          <video poster="" id="cmp1" loop playsinline muted controls style="max-height: 100%; margin-bottom: 15px;">
+            <source src="./static/videos/_Scene25_1_1_cmp.mp4" type="video/mp4">
+          </video>
+        </div>
+		
+        <div class="item item-cmp2" style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; border: none; margin-bottom: 15px;">
+          <video poster="" id="cmp2" loop playsinline muted controls style="max-height: 100%; margin-bottom: 15px;">
+            <source src="./static/videos/_Scene18_2_cmp.mp4" type="video/mp4">
+          </video>
+        </div>
+		
+        <div class="item item-cmp3" style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; border: none; margin-bottom: 15px;">
+          <video poster="" id="cmp3" loop playsinline muted controls style="max-height: 100%; margin-bottom: 15px;">
+            <source src="./static/videos/_Scene21_2_cmp.mp4" type="video/mp4">
+          </video>
+        </div>
+		
+		<div class="item item-cmp4" style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; border: none; margin-bottom: 15px;">
+          <video poster="" id="cmp4" loop playsinline muted controls style="max-height: 100%; margin-bottom: 15px;">
+            <source src="./static/videos/_Scene10_1_cmp.mp4" type="video/mp4">
+          </video>
+        </div>
+		
+		<div class="item item-cmp5" style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; border: none; margin-bottom: 15px;">
+          <video poster="" id="cmp5" loop playsinline muted controls style="max-height: 100%; margin-bottom: 15px;">
+            <source src="./static/videos/scene2_1_cmp.mp4" type="video/mp4">
+          </video>
+        </div>
+		
+		<div class="item item-cmp6" style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; border: none; margin-bottom: 15px;">
+          <video poster="" id="cmp6" loop playsinline muted controls style="max-height: 100%; margin-bottom: 15px;">
+            <source src="./static/videos/_Scene25_1_2_cmp.mp4" type="video/mp4">
+          </video>
+        </div>
+		
+	
+      </div>
+    </div>
+  </div>
+  </section>
+</center>
+
+ <!-- <hr> -->
+          <h2 class="title is-3">Comparisons on Synthetic Data</h2>
+		  <div class='content has-text-justified'>
+           <p style="font-size: 15px">We conduct comparisons with more competitive settings on synthetic data based on GOPRO. </p>
+          </div>
+	    <center>
+        <div class="hero">
+		 <div class="columns is-centered has-text-centered">
+            <div class="container">
+              <div class="content">
+                  <img id="" style="width: 90%" src="./static/images/cmp_gopro.png"/>
+              </div>
+            </div>
+		 </div>
+        </div>
+		</center>
+
+
+<br>
+<center>    
+<section class="hero is-light is-small" style="width: 90%">
+   <div class="hero-body">
+    <div class="container">
+      <div id="cmdp2-carousel" class="carousel cmdp1-carousel">
+	  
+        <div class="item item-cmp1_syn " style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; border: none; margin-bottom: 15px;">
+          <video poster="" id="cmp1_syn" loop playsinline muted controls style="max-height: 100%; margin-bottom: 15px;">
+            <source src="./static/videos/GOPR0869_11_00_cmp.mp4" type="video/mp4">
+          </video>
+        </div>
+		
+        <div class="item item-cmp2_syn" style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; border: none; margin-bottom: 15px;">
+          <video poster="" id="cmp2_syn" loop playsinline muted controls style="max-height: 100%; margin-bottom: 15px;">
+            <source src="./static/videos/GOPR0384_11_05_cmp.mp4" type="video/mp4">
+          </video>
+        </div>
+		
+        <div class="item item-cmp3_syn" style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; border: none; margin-bottom: 15px;">
+          <video poster="" id="cmp3_syn" loop playsinline muted controls style="max-height: 100%; margin-bottom: 15px;">
+            <source src="./static/videos/GOPR0385_11_01_cmp.mp4" type="video/mp4">
+          </video>
+        </div>
+	
+      </div>
+    </div>
+  </div>
+  </section>
+  </center>
+
+<!-- <section class="section" id="abl"> -->
+   <!-- <div class='container is-max-desktop'> -->
+   <h2 class="title is-3">Challenging Scenarios</h2>
+      <p>Low-lit Scenes: We further explore effects of noisy RS observations to our method.</p>
+
+   <div class="notification hero is-white">
+   <div class="">
+   <div class="content">
+      <div class="columns is-centered is-mobile">
+                  <div class="column is-one-quarter-desktop is-one-quarter-tablet is-half-mobile has-text-centered">
+                     <div class="hyper-grid-wrapper">
+                        <div class="hyper-ref-rgb">
+                           <img id="" style="width: 100%" fetchpriority="low" src="./static/images/challenge/scene25_1_000050_rs_noise.png"/>
+                        </div>
+                     </div>
+
+                  </div>
+                  <div class="column is-one-quarter-desktop is-one-quarter-tablet is-one-quarter-mobile has-text-centered">
+                     <div class="hyper-grid-wrapper">
+                        <div class="hyper-grid-rgb">
+                           <img id="" style="width: 100%" fetchpriority="low" src="./static/images/challenge/scene25_1_000050_blur.png"/ >
+                        </div>
+                     </div>
+                  </div>
+                  <div class="column is-one-quarter-desktop is-one-quarter-tablet is-one-quarter-mobile has-text-centered">
+                     <div class="hyper-grid-wrapper">
+                        <div class="hyper-grid-rgb">
+                           <img id="" style="width: 100%" fetchpriority="low" src="./static/images/challenge/scene25_1_001226_pre.png"/>
+                        </div>
+                     </div>
+                  </div>
+                  <div class="column is-one-quarter-desktop is-one-quarter-tablet is-one-quarter-mobile has-text-centered">
+                     <div class="hyper-grid-wrapper">
+                        <div class="hyper-grid-rgb">
+                           <img id="" style="width: 100%" fetchpriority="low" src="./static/images/challenge/scene25_1_001226_gt.png"/>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+      <div class="columns is-centered is-mobile">
+                  <div class="column is-one-quarter-desktop is-one-quarter-tablet is-half-mobile has-text-centered">
+                     <div class="hyper-grid-wrapper">
+                        <div class="hyper-ref-rgb">
+                           <img id="" style="width: 100%" fetchpriority="low" src="./static/images/challenge/scene18_2_000048_rs_noise.png"/>
+                        </div>
+                     </div>
+                           <center>RS (noisy)</center>
+                  </div>
+                  <div class="column is-one-quarter-desktop is-one-quarter-tablet is-one-quarter-mobile has-text-centered">
+                     <div class="hyper-grid-wrapper">
+                        <div class="hyper-grid-rgb">
+                           <img id="" style="width: 100%" fetchpriority="low" src="./static/images/challenge/scene18_2_000048_blur.png"/>
+                        </div>
+                     </div>
+                           <center>Blur</center>
+                  </div>
+                  <div class="column is-one-quarter-desktop is-one-quarter-tablet is-one-quarter-mobile has-text-centered">
+                     <div class="hyper-grid-wrapper">
+                        <div class="hyper-grid-rgb">
+                           <img id="" style="width: 100%" fetchpriority="low" src="./static/images/challenge/scene18_2_001176_pre.png"/>
+                        </div>
+                     </div>
+                           <center>Ours</center>
+                  </div>
+                  <div class="column is-one-quarter-desktop is-one-quarter-tablet is-one-quarter-mobile has-text-centered">
+                     <div class="hyper-grid-wrapper">
+                        <div class="hyper-grid-rgb">
+                           <img id="" style="width: 100%" fetchpriority="low" src="./static/images/challenge/scene18_2_001176_gt.png"/>
+                        </div>
+                     </div>
+                           <center>GT</center>
+                  </div>
+               </div>
+   </div>
+   </div>
+   </div>
+   
+
+      <p>Misaligned Views: We randomly shift RS view in image space and provide comparisons with strictly-aligned views.</p>
+
+   <div class="notification hero is-white">
+   <div class="">
+   <div class="content">
+      <div class="columns is-centered is-mobile">
+                  <div class="column is-one-third-desktop is-one-third-tablet is-half-mobile has-text-centered">
+                     
+                     <div class="">
+                        <div class="">
+                           <img id="" style="width: 100%" fetchpriority="low" src="./static/images/challenge/mis0-mis4.png"/>
+                        </div>
+                     </div>
+                  </div>
+
+                  <div class="column is-one-third-desktop is-one-third-tablet is-half-mobile has-text-centered">
+                     <div class="">
+                        <div class="">
+                           <img id="" style="width: 100%" fetchpriority="low" src="./static/images/challenge/mis0-mis6.png"/>
+                        </div>
+                     </div>
+                  </div>
+
+                  <div class="column is-one-third-desktop is-one-third-tablet is-half-mobile has-text-centered">
+                     <div class="">
+                        <div class="">
+                           <img id="" style="width: 100%" fetchpriority="low" src="./static/images/challenge/mis0-mis8.png"/>
+                        </div>
+                     </div>
+
+                  </div>
+
+               </div>
+
+   </div>
+   </div>
+   </div>
+   
+</section>
+
+
+    <section class="section" id="BibTeX">
+      <div class="container content is-max-desktop">
+        <h2 class="title">BibTeX</h2>
+        <pre><code>@article{ji2024motion,
+  title={Motion Blur Decomposition with Cross-shutter Guidance},
+  author={Ji, Xiang and Jiang, Haiyang and Zheng, Yinqiang},
+  journal={arXiv preprint arXiv:2404.01120},
+  year={2024}
+}
+	</code></pre>
+      </div>
+    </section>
+      
+
+
+      <footer class="footer">
+        <div class="container">
+            <div class="columns is-centered">
+                <div class="column is-8">
+                    <div class="content has-text-centered">
+                        <p>
+                           The website design is adapted from <a href="https://portrait-disco.github.io/">DisCO</a> and <a href="https://github.com/hypernerf/hypernerf.github.io">HyperNeRF</a>.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+      <script type="text/javascript" src="./static/slick/slick.min.js"></script>
+   </body>
+</html>
